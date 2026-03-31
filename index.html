@@ -134,5 +134,196 @@
         <input type="range" class="speed-slider" id="speedSlider" min="1" max="3" value="2" step="1">
         <span class="speed-value" id="speedValue">MEDIUM</span>
     </div>
+    <script>
+        // Mock 数据 - 小红书风格评论
+        const mockComments = [
+            "这也太好看了吧！！",
+            "求链接，求链接",
+            "救命，真的绝了",
+            "收藏了收藏了",
+            "博主好用心啊",
+            "这个配色绝绝子",
+            "终于找到了！",
+            "姐妹们冲！",
+            "已入手，真的香",
+            "笔记做得好详细",
+            "支持博主！",
+            "这个角度拍得好好看",
+            "请问有店铺链接吗",
+            "周末去试试",
+            "太会选了，点赞"
+        ];
+
+        // 轨道配置
+        const TRACK_COUNT = 7;
+        const TRACK_HEIGHT_RATIO = 0.12;
+
+        // 速度配置（秒，完成一轮穿越）
+        const SPEED_CONFIG = {
+            1: 15,  // 慢
+            2: 10,  // 中
+            3: 5    // 快
+        };
+
+        // 颜色配置 - 霓虹配色
+        const NEON_COLORS = [
+            { text: '#f8fafc', shadow: '#8b5cf6' },   // 白色紫光
+            { text: '#06b6d4', shadow: '#06b6d4' },   // 青色
+            { text: '#f472b6', shadow: '#f472b6' },   // 粉色
+            { text: '#a78bfa', shadow: '#8b5cf6' },   // 淡紫
+            { text: '#22d3d1', shadow: '#06b6d4' }    // 青绿
+        ];
+
+        // 弹幕项类
+        class DanmuItem {
+            constructor(text, trackIndex, speed) {
+                this.text = text;
+                this.trackIndex = trackIndex;
+                this.x = window.innerWidth + 100;
+                this.speed = (window.innerWidth + 200) / (speed * 60); // 像素/帧
+                this.colorScheme = NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)];
+                this.fontSize = 20 + Math.random() * 8;
+            }
+
+            update() {
+                this.x -= this.speed;
+            }
+
+            isOffScreen() {
+                return this.x < -this.getWidth();
+            }
+
+            getWidth() {
+                return this.text.length * this.fontSize * 0.6;
+            }
+
+            getY(canvasHeight) {
+                const trackHeight = canvasHeight * TRACK_HEIGHT_RATIO;
+                return trackHeight * this.trackIndex + trackHeight / 2;
+            }
+        }
+
+        // 弹幕管理器
+        class DanmuManager {
+            constructor(canvas) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d');
+                this.danmuList = [];
+                this.speed = SPEED_CONFIG[2];
+                this.lastSpawnTime = 0;
+                this.spawnInterval = 1500;
+                this.resize();
+            }
+
+            resize() {
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+            }
+
+            setSpeed(speedLevel) {
+                this.speed = SPEED_CONFIG[speedLevel];
+                // 更新所有弹幕的速度
+                this.danmuList.forEach(d => {
+                    d.speed = (window.innerWidth + 200) / (this.speed * 60);
+                });
+            }
+
+            spawn() {
+                const availableTracks = [];
+                for (let i = 0; i < TRACK_COUNT; i++) {
+                    const hasDanmuInTrack = this.danmuList.some(d =>
+                        d.trackIndex === i && d.x > window.innerWidth * 0.7
+                    );
+                    if (!hasDanmuInTrack) {
+                        availableTracks.push(i);
+                    }
+                }
+
+                if (availableTracks.length > 0) {
+                    const trackIndex = availableTracks[Math.floor(Math.random() * availableTracks.length)];
+                    const text = mockComments[Math.floor(Math.random() * mockComments.length)];
+                    this.danmuList.push(new DanmuItem(text, trackIndex, this.speed));
+                }
+            }
+
+            update(timestamp) {
+                // 生成新弹幕
+                if (timestamp - this.lastSpawnTime > this.spawnInterval) {
+                    this.spawn();
+                    this.lastSpawnTime = timestamp;
+                }
+
+                // 更新位置
+                this.danmuList.forEach(d => d.update());
+
+                // 移除屏幕外的弹幕
+                this.danmuList = this.danmuList.filter(d => !d.isOffScreen());
+            }
+
+            draw() {
+                // 清空画布
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+                // 绘制每条弹幕
+                this.danmuList.forEach(d => {
+                    const y = d.getY(this.canvas.height);
+
+                    // 霓虹发光效果
+                    this.ctx.save();
+                    this.ctx.font = `bold ${d.fontSize}px 'Orbitron', monospace`;
+                    this.ctx.textAlign = 'left';
+                    this.ctx.textBaseline = 'middle';
+
+                    // 外发光
+                    this.ctx.shadowColor = d.colorScheme.shadow;
+                    this.ctx.shadowBlur = 20;
+                    this.ctx.fillStyle = d.colorScheme.shadow;
+                    this.ctx.fillText(d.text, d.x, y);
+
+                    // 内发光
+                    this.ctx.shadowBlur = 10;
+                    this.ctx.fillStyle = d.colorScheme.text;
+                    this.ctx.fillText(d.text, d.x, y);
+
+                    this.ctx.restore();
+                });
+            }
+        }
+
+        // 初始化
+        const canvas = document.getElementById('danmuCanvas');
+        const danmuManager = new DanmuManager(canvas);
+
+        // 速度控制
+        const speedSlider = document.getElementById('speedSlider');
+        const speedValue = document.getElementById('speedValue');
+        const speedLabels = { 1: 'SLOW', 2: 'MEDIUM', 3: 'FAST' };
+
+        speedSlider.addEventListener('input', (e) => {
+            const level = parseInt(e.target.value);
+            danmuManager.setSpeed(level);
+            speedValue.textContent = speedLabels[level];
+        });
+
+        // 窗口大小变化
+        window.addEventListener('resize', () => {
+            danmuManager.resize();
+        });
+
+        // 动画循环
+        function animate(timestamp) {
+            danmuManager.update(timestamp);
+            danmuManager.draw();
+            requestAnimationFrame(animate);
+        }
+
+        // 隐藏加载屏并开始
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                document.getElementById('loadingScreen').classList.add('hidden');
+                requestAnimationFrame(animate);
+            }, 800);
+        });
+    </script>
 </body>
 </html>

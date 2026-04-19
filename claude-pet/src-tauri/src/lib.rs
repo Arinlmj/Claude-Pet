@@ -310,26 +310,34 @@ async fn send_message_via_socket(
 }
 
 #[tauri::command]
-async fn send_message(session_id: String, content: String) -> Result<state::Message, String> {
-    // 尝试通过 socket 发送
-    if let Some(socket_path) = get_claude_socket_path() {
-        if let Ok(message) = send_message_via_socket(&socket_path, &session_id, &content).await {
-            return Ok(message);
+async fn send_message(
+    state: tauri::State<'_, Mutex<AppState>>,
+    _session_id: String,
+    content: String,
+) -> Result<state::Message, String> {
+    let content_clone = content.clone();
+    let claude_manager = {
+        let app_state = state.lock().map_err(|e| e.to_string())?;
+        app_state.claude_manager.clone()
+    };
+
+    let mut manager = claude_manager.lock().await;
+    match manager.send_message(&content_clone).await {
+        Ok(msg) => Ok(msg),
+        Err(e) => {
+            tracing::warn!("send_message failed: {}, using fallback", e);
+            // Fallback: 模拟发送
+            Ok(state::Message {
+                id: format!("{}", std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis()),
+                role: "user".to_string(),
+                content,
+                timestamp: "刚刚".to_string(),
+            })
         }
     }
-
-    // Fallback: 模拟发送（实际不发送，只返回本地构建的消息）
-    tracing::warn!("Socket not available, message not actually sent");
-
-    Ok(state::Message {
-        id: format!("{}", std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis()),
-        role: "user".to_string(),
-        content,
-        timestamp: "刚刚".to_string(),
-    })
 }
 
 #[tauri::command]

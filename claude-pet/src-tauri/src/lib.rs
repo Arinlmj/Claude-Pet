@@ -251,7 +251,7 @@ async fn get_sessions() -> Result<Vec<state::Session>, String> {
 
 #[tauri::command]
 async fn get_messages(session_id: String) -> Result<Vec<state::Message>, String> {
-    // 尝试通过 socket 获取消息
+    // 尝试通过 socket 获取消息（如果未来 Claude Code 支持）
     if let Some(socket_path) = get_claude_socket_path() {
         if let Ok(messages) = read_messages_from_socket(&socket_path, &session_id).await {
             if !messages.is_empty() {
@@ -260,7 +260,66 @@ async fn get_messages(session_id: String) -> Result<Vec<state::Message>, String>
         }
     }
 
-    // Fallback: 返回模拟消息
+    // Fallback: 从 history.jsonl 读取该会话的消息
+    let history_path = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".claude")
+        .join("history.jsonl");
+
+    if history_path.exists() {
+        let content = tokio::fs::read_to_string(&history_path)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let mut messages = Vec::new();
+        for line in content.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            if let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) {
+                let entry_session = entry.get("session_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                if entry_session == session_id {
+                    let role = entry.get("type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("user");
+                    let role_str = if role == "assistant" || role == "assistant_response" {
+                        "assistant"
+                    } else {
+                        "user"
+                    };
+                    messages.push(state::Message {
+                        id: entry.get("id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("0")
+                            .to_string(),
+                        role: role_str.to_string(),
+                        content: entry.get("display")
+                            .or_else(|| entry.get("content"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        timestamp: entry.get("timestamp")
+                            .and_then(|v| v.as_i64())
+                            .map(|ts| {
+                                chrono::Utc.timestamp_millis_opt(ts)
+                                    .single()
+                                    .map(|dt| dt.format("%H:%M").to_string())
+                                    .unwrap_or_default()
+                            })
+                            .unwrap_or_default(),
+                    });
+                }
+            }
+        }
+
+        if !messages.is_empty() {
+            return Ok(messages);
+        }
+    }
+
+    // 最终 Fallback: 模拟消息
     Ok(vec![
         state::Message {
             id: "1".to_string(),
@@ -383,13 +442,24 @@ async fn set_pet_state(state: tauri::State<'_, Mutex<AppState>>, new_state: Stri
 }
 
 #[tauri::command]
-async fn get_claude_status() -> Result<state::ClaudeStatus, String> {
-    // TODO: Get real status from MCP client
+async fn get_claude_status(
+    state: tauri::State<'_, Mutex<AppState>>,
+) -> Result<state::ClaudeStatus, String> {
+    let claude_manager = {
+        let app_state = state.lock().map_err(|e| e.to_string())?;
+        app_state.claude_manager.clone()
+    };
+
+    let mcp_status = {
+        let mut manager = claude_manager.lock().await;
+        manager.poll_status().await.map_err(|e| e.to_string())?
+    };
+
     Ok(state::ClaudeStatus {
-        connected: false,
-        current_state: "idle".to_string(),
-        uptime_seconds: 3600,
-        last_activity: "刚刚".to_string(),
+        connected: mcp_status.connected,
+        current_state: mcp_status.current_state,
+        uptime_seconds: mcp_status.uptime_seconds,
+        last_activity: mcp_status.last_activity,
     })
 }
 

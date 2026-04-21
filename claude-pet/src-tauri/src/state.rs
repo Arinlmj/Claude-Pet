@@ -87,3 +87,9 @@ pub struct HistoryEntry {
     pub project: String,
     pub session_id: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolStatus {
+    pub tool_name: String,
+    pub timestamp: u64,
+}

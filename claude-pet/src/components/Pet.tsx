@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import HoverInfoPanel from "./HoverInfoPanel";
+import ToolBubble, { getToolCategory } from "./ToolBubble";
 import { usePetState } from "../hooks/usePetState";
 import "./Pet.css";
 
@@ -12,12 +13,13 @@ interface PetProps {
 }
 
 function Pet({ onHoverChange }: PetProps) {
-  const { state } = usePetState();
+  const { state, currentTool } = usePetState();
   const [isBlinking, setIsBlinking] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [interaction, setInteraction] = useState<InteractionType>(null);
   const [showStars, setShowStars] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
+  const [toolAnimation, setToolAnimation] = useState<string>("");
   const currentPosRef = useRef({ x: 1100, y: 650 });
   const targetRef = useRef({ x: 1100, y: 650 });
   const isDraggingRef = useRef(false);
@@ -58,6 +60,16 @@ function Pet({ onHoverChange }: PetProps) {
 
     scheduleBlink();
   }, []);
+
+  // Listen for currentTool changes and update animation
+  useEffect(() => {
+    if (currentTool?.tool_name) {
+      const category = getToolCategory(currentTool.tool_name);
+      setToolAnimation(category);
+    } else {
+      setToolAnimation("");
+    }
+  }, [currentTool]);
 
   // Fixed position at bottom-right - no roaming animation
   useEffect(() => {
@@ -238,8 +250,8 @@ function Pet({ onHoverChange }: PetProps) {
         onHoverChange?.(false);
       }}
     >
-        <HoverInfoPanel visible={isHovering} />
-        <div className={`pet-ghost ${state}`} style={{ zIndex: 1 }}>
+        <ToolBubble toolName={currentTool?.tool_name ?? null} visible={!!currentTool?.tool_name} />
+        <div className={`pet-ghost ${state} ${toolAnimation}`} style={{ zIndex: 1 }}>
           <svg
             viewBox="0 0 100 100"
             width="80"
@@ -283,6 +295,7 @@ function Pet({ onHoverChange }: PetProps) {
             {state === "idle" && "😴"}
           </div>
         </div>
+        <HoverInfoPanel visible={isHovering} />
         {showStars && (
           <>
             <span className="star-particle" style={{ top: "10%", left: "20%" }}>✨</span>

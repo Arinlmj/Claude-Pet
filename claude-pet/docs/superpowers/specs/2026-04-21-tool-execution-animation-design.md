@@ -38,145 +38,192 @@
 ## 数据流
 
 ```
-Rust: poll_status()
-  → 返回 ClaudeStatus {
-      current_state: "thinking",
-      current_task: {
-        tool_name: "Bash",
-        message_preview: "ls -la",
-        progress: "50%"
-      }
-    }
-  → Frontend: usePetState 解析 current_task
-  → 根据 tool_name 匹配类别 → 获取动画类型
-  → 显示工具气泡 + 触发对应动画
-  → 动画持续到下一次 poll 状态变化
+Claude Code 执行工具
+    ↓ PostToolUse hook
+/tmp/claude-pet-tool-status.json  ← 写入工具信息
+    ↑ 文件监控 (notify crate)
+Tauri App (Rust)
+    ↓ 状态更新
+Frontend (React)
+    ↓ 工具名称 + 动画
+Pet 显示工具气泡 + 触发动画
 ```
 
-## 前端变更
+### PostToolUse Hook 配置
 
-### 1. usePetState Hook 增强
+在 `~/.claude/settings.json` 中配置：
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"tool_name\":\"$TOOL_NAME\",\"timestamp\":'$(date +%s)'}' > /tmp/claude-pet-tool-status.json"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### 监控文件格式
+
+```json
+{
+  "tool_name": "Bash",
+  "timestamp": 1713672000
+}
+```
+
+## 后端实现
+
+### 1. 文件监控 (Rust)
+
+使用 `notify` crate 监控 `/tmp/claude-pet-tool-status.json` 文件变化：
+
+```rust
+use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
+use std::sync::mpsc::channel;
+use std::time::Duration;
+
+pub fn watch_tool_status<F>(callback: F) -> Result<(), String>
+where
+    F: Fn(String) + Send + 'static,
+{
+    let path = PathBuf::from("/tmp/claude-pet-tool-status.json");
+    let (tx, rx) = channel();
+
+    let mut watcher = RecommendedWatcher::new(
+        move |res: Result<notify::Event, _>| {
+            if let Ok(event) = res {
+                tx.send(event).unwrap();
+            }
+        },
+        Config::default().with_poll_interval(Duration::from_millis(500)),
+    ).map_err(|e| e.to_string())?;
+
+    watcher.watch(&path, RecursiveMode::NonRecursive).map_err(|e| e.to_string())?;
+
+    // Spawn thread to handle events
+    std::thread::spawn(move || {
+        loop {
+            match rx.recv_timeout(Duration::from_secs(1)) {
+                Ok(event) => {
+                    if event.kind.is_modify() {
+                        // Read and parse file
+                        if let Ok(content) = std::fs::read_to_string(&path) {
+                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                                callback(json.to_string());
+                            }
+                        }
+                    }
+                }
+                Err(_) => continue,
+            }
+        }
+    });
+
+    Ok(())
+}
+```
+
+### 2. 新增 Tauri 命令
+
+```rust
+#[tauri::command]
+async fn get_current_tool() -> Result<Option<ToolStatus>, String> {
+    let path = PathBuf::from("/tmp/claude-pet-tool-status.json");
+    if !path.exists() {
+        return Ok(None);
+    }
+    let content = tokio::fs::read_to_string(&path)
+        .await
+        .map_err(|e| e.to_string())?;
+    serde_json::from_str(&content).map_err(|e| e.to_string())
+}
+```
+
+## 前端实现
+
+### 1. 新增 Hook 返回 currentTool
 
 ```typescript
-interface CurrentTask {
+interface ToolStatus {
   tool_name: string | null;
-  message_preview: string | null;
-  progress: string | null;
+  timestamp: number;
 }
 
-// 新增返回 currentTask
-return { state, realtimeStatus, error, refetch, currentTask };
+export function usePetState() {
+  const [currentTool, setCurrentTool] = useState<ToolStatus | null>(null);
+
+  // 轮询获取当前工具状态
+  useEffect(() => {
+    const fetchTool = async () => {
+      try {
+        const tool = await invoke<ToolStatus | null>("get_current_tool");
+        setCurrentTool(tool);
+      } catch (e) {
+        // ignore
+      }
+    };
+    fetchTool();
+    const interval = setInterval(fetchTool, 500);
+    return () => clearInterval(interval);
+  }, []);
+
+  return { state, currentTool, /* ... */ };
+}
 ```
 
 ### 2. 工具分类映射
 
 ```typescript
-const TOOL_CATEGORY_MAP: Record<string, { category: string; icon: string }> = {
-  Bash: { category: 'terminal', icon: '⌨️' },
-  Read: { category: 'file', icon: '📄' },
-  Write: { category: 'file', icon: '📄' },
-  Edit: { category: 'file', icon: '📄' },
-  Glob: { category: 'file', icon: '📄' },
-  Grep: { category: 'file', icon: '📄' },
-  WebSearch: { category: 'search', icon: '🔍' },
-  // ... 其他工具
-};
-```
+export function getToolCategory(toolName: string): string {
+  const terminalTools = ["Bash", "shell"];
+  const fileTools = ["Read", "Write", "Edit", "Glob", "Grep"];
+  const searchTools = ["WebSearch", "WebFetch", "SearchCode"];
+  const gitTools = ["GitCommit", "GitPush", "GitPull", "GitClone"];
+  const mcpTools = ["ReadMcpResource", "ListMcpResources"];
+  const conversationTools = ["AskUserQuestion", "GetPrompt"];
 
-### 3. Pet 组件变更
-
-- 新增 `ToolBubble` 组件显示工具名称
-- 新增 `toolAnimation` 状态
-- 根据工具类型应用不同 CSS 动画类
-
-### 4. CSS 动画定义
-
-```css
-/* 抖动 - terminal 类 */
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-3px); }
-  75% { transform: translateX(3px); }
-}
-
-/* 右歪头 - file 类 */
-@keyframes tilt-right {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(15deg); }
-}
-
-/* 眯眼 - search 类 */
-@keyframes squint {
-  0%, 100% { transform: scaleY(1); }
-  50% { transform: scaleY(0.3); }
-}
-
-/* 跳跃 - git 类 */
-@keyframes bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
-}
-
-/* 眨眼 - mcp 类 */
-@keyframes blink {
-  0%, 45%, 55%, 100% { transform: scaleY(1); }
-  50% { transform: scaleY(0.1); }
-}
-
-/* 歪头 - conversation 类 */
-@keyframes tilt-left {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(-15deg); }
-}
-
-/* 摇摆 - default 类 */
-@keyframes wiggle {
-  0%, 100% { transform: rotate(0deg); }
-  25% { transform: rotate(-5deg); }
-  75% { transform: rotate(5deg); }
+  if (terminalTools.includes(toolName)) return "terminal";
+  if (fileTools.includes(toolName)) return "file";
+  if (searchTools.includes(toolName)) return "search";
+  if (gitTools.includes(toolName)) return "git";
+  if (mcpTools.includes(toolName)) return "mcp";
+  if (conversationTools.includes(toolName)) return "conversation";
+  return "default";
 }
 ```
 
-## Rust 后端变更
+### 3. CSS 动画
 
-### 1. poll_status 增强
-
-`current_task` 字段需要包含完整信息：
-
-```rust
-pub struct CurrentTask {
-    pub tool_name: Option<String>,
-    pub message_preview: Option<String>,
-    pub progress: Option<String>,
-}
-```
-
-目前 `poll_status` 返回的 `ClaudeStatus.current_task` 为 `None`，需要从 `claude --print` 输出中解析 `current_task` 信息。
-
-### 2. 解析 claude --print 输出
-
-Claude `--print -p status` 返回的 JSON 可能包含：
-- `state`: 当前状态
-- `task`: 当前任务信息（含 `tool` 字段）
-
-需要检查实际返回格式并调整解析逻辑。
+同上文"工具分类与动画"表格定义。
 
 ## 文件变更清单
 
 | 文件 | 变更内容 |
 |------|----------|
-| `src/hooks/usePetState.ts` | 返回 currentTask |
-| `src/components/Pet.tsx` | 新增工具气泡、动画逻辑 |
-| `src/components/Pet.css` | 新增工具动画样式 |
+| `src-tauri/Cargo.toml` | 添加 `notify` crate 依赖 |
+| `src-tauri/src/lib.rs` | 新增文件监控和 `get_current_tool` 命令 |
+| `src-tauri/src/state.rs` | 添加 `ToolStatus` 结构体 |
+| `src/hooks/usePetState.ts` | 返回 `currentTool` |
+| `src/components/Pet.tsx` | 集成工具显示和动画 |
+| `src/components/Pet.css` | 添加工具动画样式 |
 | `src/components/ToolBubble.tsx` | 新建工具气泡组件 |
-| `src-tauri/src/mcp_client.rs` | 解析 current_task 信息 |
-| `src-tauri/src/state.rs` | CurrentTask 结构体已存在 |
 
 ## 实现顺序
 
-1. **后端**：完善 `poll_status` 解析，验证 `current_task` 数据
-2. **Hook**：`usePetState` 返回 `currentTask`
-3. **组件**：创建 `ToolBubble` 组件
-4. **Pet** ：集成工具显示和动画
-5. **样式**：添加 CSS 动画
-6. **测试**：各工具类型动画效果验证
+1. **后端**：添加 `notify` crate，监控文件变化
+2. **命令**：新增 `get_current_tool` Tauri 命令
+3. **Hook**：`usePetState` 返回 `currentTool`
+4. **组件**：创建 `ToolBubble` 组件
+5. **Pet**：集成工具显示和动画
+6. **样式**：添加 CSS 动画
+7. **配置**：用户配置 PostToolUse hook
+8. **测试**：验证各工具类型动画效果

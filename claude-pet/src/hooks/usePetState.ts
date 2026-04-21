@@ -1,7 +1,13 @@
 import { useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 export type PetState = "idle" | "thinking" | "typing" | "waiting" | "error";
+
+interface ToolStatus {
+  tool_name: string;
+  timestamp: number;
+}
 
 interface RealtimeStatus {
   connected: boolean;
@@ -24,6 +30,7 @@ export function usePetState() {
   const [state, setState] = useState<PetState>("idle");
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [currentTool, setCurrentTool] = useState<ToolStatus | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -43,5 +50,28 @@ export function usePetState() {
     return () => clearInterval(interval);
   }, [fetchStatus]);
 
-  return { state, realtimeStatus, error, refetch: fetchStatus };
+  // 监听工具状态变化事件
+  useEffect(() => {
+    const unlisten = listen<ToolStatus>("tool-status-changed", (event) => {
+      setCurrentTool(event.payload);
+    });
+    return () => { unlisten.then((fn) => fn()); };
+  }, []);
+
+  // 轮询获取当前工具状态（作为后备）
+  useEffect(() => {
+    const fetchTool = async () => {
+      try {
+        const tool = await invoke<ToolStatus | null>("get_current_tool");
+        if (tool) setCurrentTool(tool);
+      } catch (e) {
+        // ignore
+      }
+    };
+    fetchTool();
+    const interval = setInterval(fetchTool, 500);
+    return () => clearInterval(interval);
+  }, []);
+
+  return { state, realtimeStatus, error, refetch: fetchStatus, currentTool };
 }

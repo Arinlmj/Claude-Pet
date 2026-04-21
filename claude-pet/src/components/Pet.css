@@ -1,0 +1,247 @@
+.pet-container {
+  position: relative;
+  width: 220px;
+  height: 450px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 20px;
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  border: none;
+  background: transparent;
+  overflow: visible;
+}
+
+.pet-ghost {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s ease;
+  outline: none;
+  border: none;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.pet-svg {
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
+  transition: transform 0.3s ease, filter 0.3s ease;
+  outline: none;
+  border: none;
+  background: transparent;
+}
+
+.pet-svg:hover {
+  transform: scale(1.05);
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.3));
+}
+
+/* Bounce animation */
+.pet-svg.bounce {
+  animation: bounce 0.6s ease;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  25% { transform: translateY(-15px); }
+  50% { transform: translateY(0); }
+  75% { transform: translateY(-8px); }
+}
+
+/* Spin animation */
+.pet-svg.spin {
+  animation: spin 0.6s ease;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.2); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+/* Squish animation */
+.pet-svg.squish {
+  animation: squish 0.6s ease;
+}
+
+@keyframes squish {
+  0%, 100% { transform: scaleY(1) scaleX(1); }
+  30% { transform: scaleY(0.7) scaleX(1.3); }
+  60% { transform: scaleY(1.2) scaleX(0.8); }
+}
+
+/* Angry animation */
+.pet-svg.angry {
+  animation: angry 0.6s ease;
+}
+
+@keyframes angry {
+  0%, 100% { transform: scale(1); }
+  25% { transform: scale(1.1) rotate(-5deg); }
+  75% { transform: scale(1.1) rotate(5deg); }
+}
+
+.eye {
+  transition: ry 0.15s ease;
+}
+
+.state-bubble {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.state-bubble.idle {
+  opacity: 1;
+}
+
+.state-bubble.thinking,
+.state-bubble.typing,
+.state-bubble.waiting,
+.state-bubble.error {
+  opacity: 1;
+  animation: pulse 1s ease infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+/* Star particles for spin effect */
+.star-particle {
+  position: absolute;
+  font-size: 12px;
+  animation: starFloat 0.6s ease forwards;
+  pointer-events: none;
+  z-index: 10;
+}
+
+@keyframes starFloat {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-30px) scale(0.5);
+  }
+}
+
+/* Hover info panel - styles are in HoverInfoPanel.css */
+
+.hover-info-panel h3 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: #333;
+  font-weight: 600;
+}
+
+.hover-info-panel .status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  padding: 4px 0;
+  color: #666;
+}
+
+.hover-info-panel .status-row .label {
+  color: #999;
+}
+
+.hover-info-panel .status-row .value {
+  color: #333;
+  font-weight: 500;
+}
+
+.hover-info-panel .connected {
+  color: #4caf50;
+}
+
+.hover-info-panel .disconnected {
+  color: #ff5252;
+}
+
+/* 工具执行动画 */
+
+/* 抖动 - terminal 类 (Bash, shell) */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+
+.pet-ghost.terminal {
+  animation: shake 0.3s ease-in-out infinite;
+}
+
+/* 右歪头 - file 类 (Read, Write, Edit, Glob, Grep) */
+@keyframes tilt-right {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(15deg); }
+}
+
+.pet-ghost.file {
+  animation: tilt-right 0.8s ease-in-out infinite;
+}
+
+/* 眯眼 - search 类 (WebSearch, WebFetch, SearchCode 等) */
+@keyframes squint {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.85); }
+}
+
+.pet-ghost.search .eye {
+  animation: squint 1.5s ease-in-out infinite;
+}
+
+/* 跳跃 - git 类 (GitCommit, GitPush, GitPull 等) */
+@keyframes bounce-tool {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+.pet-ghost.git {
+  animation: bounce-tool 0.5s ease-in-out infinite;
+}
+
+/* 眨眼 - mcp 类 (ReadMcpResource, ListMcpResources 等) */
+@keyframes blink {
+  0%, 45%, 55%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.1); }
+}
+
+.pet-ghost.mcp {
+  animation: blink 2s ease-in-out infinite;
+}
+
+/* 左歪头 - conversation 类 (AskUserQuestion, GetPrompt) */
+@keyframes tilt-left {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-15deg); }
+}
+
+.pet-ghost.conversation {
+  animation: tilt-left 1s ease-in-out infinite;
+}
+
+/* 摇摆 - default 类 (其他工具) */
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-5deg); }
+  75% { transform: rotate(5deg); }
+}
+
+.pet-ghost.default,
+.pet-ghost:not([class*="terminal"]):not([class*="file"]):not([class*="search"]):not([class*="git"]):not([class*="mcp"]):not([class*="conversation"]) {
+  animation: wiggle 0.6s ease-in-out infinite;
+}

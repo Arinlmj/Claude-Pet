@@ -7,7 +7,10 @@ mod state;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use chrono::TimeZone;
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
+use std::sync::mpsc::channel;
+use std::time::Duration;
 use state::AppState;
 
 /// Calculate bottom-right position for the pet window
@@ -16,8 +19,8 @@ fn get_bottom_right_position(app_handle: &tauri::AppHandle) -> (f64, f64) {
         if let Some(monitor) = monitor {
             let size = monitor.size();
             let scale = monitor.scale_factor();
-            let window_width = 150.0;
-            let window_height = 200.0;
+            let window_width = 220.0;
+            let window_height = 450.0;
             let padding = 20.0;
 
             let x = (size.width as f64 / scale) - window_width - padding;
@@ -49,6 +52,49 @@ fn get_claude_socket_path() -> Option<PathBuf> {
         }
     }
     None
+}
+
+fn setup_tool_status_watcher(app_handle: tauri::AppHandle) -> Result<(), String> {
+    let path = std::path::PathBuf::from("/tmp/claude-pet-tool-status.json");
+
+    // 确保文件存在
+    if !path.exists() {
+        std::fs::write(&path, "{}").map_err(|e| e.to_string())?;
+    }
+
+    let (tx, rx) = channel();
+
+    let mut watcher = RecommendedWatcher::new(
+        move |res: Result<notify::Event, _>| {
+            if let Ok(event) = res {
+                let _ = tx.send(event);
+            }
+        },
+        Config::default().with_poll_interval(Duration::from_millis(500)),
+    ).map_err(|e| e.to_string())?;
+
+    watcher.watch(&path, RecursiveMode::NonRecursive).map_err(|e| e.to_string())?;
+
+    // Spawn thread to handle events
+    std::thread::spawn(move || {
+        loop {
+            match rx.recv_timeout(Duration::from_secs(1)) {
+                Ok(event) => {
+                    if event.kind.is_modify() {
+                        if let Ok(content) = std::fs::read_to_string(&path) {
+                            if let Ok(tool_status) = serde_json::from_str::<state::ToolStatus>(&content) {
+                                // 发送事件到前端
+                                let _ = app_handle.emit("tool-status-changed", tool_status);
+                            }
+                        }
+                    }
+                }
+                Err(_) => continue,
+            }
+        }
+    });
+
+    Ok(())
 }
 
 async fn read_messages_from_socket(
@@ -107,6 +153,10 @@ pub fn run() {
     tauri::Builder::default()
         .manage(Mutex::new(AppState::new()))
         .setup(|app| {
+            // Setup tool status watcher
+            if let Err(e) = setup_tool_status_watcher(app.handle().clone()) {
+                tracing::warn!("Failed to setup tool status watcher: {}", e);
+            }
             // Create the pet window (small floating window)
             let (x, y) = get_bottom_right_position(&app.handle());
 
@@ -116,7 +166,7 @@ pub fn run() {
                 WebviewUrl::App("index.html".into()),
             )
             .title("Claude Pet")
-            .inner_size(120.0, 120.0)
+            .inner_size(220.0, 450.0)
             .decorations(false)
             .transparent(true)
             .shadow(false)
@@ -150,7 +200,8 @@ pub fn run() {
             get_claude_status,
             get_project_info,
             get_interaction_info,
-            get_realtime_status
+            get_realtime_status,
+            get_current_tool
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -158,8 +209,11 @@ pub fn run() {
 
 #[tauri::command]
 async fn open_mini_chat(app: tauri::AppHandle, x: f64, y: f64) -> Result<(), String> {
+    tracing::info!("open_mini_chat called with x={}, y={}", x, y);
+
     // Check if window already exists
     if app.get_webview_window("mini-chat").is_some() {
+        tracing::info!("mini-chat window already exists, showing it");
         if let Some(window) = app.get_webview_window("mini-chat") {
             window.show().map_err(|e| e.to_string())?;
             window.set_focus().map_err(|e| e.to_string())?;
@@ -167,26 +221,58 @@ async fn open_mini_chat(app: tauri::AppHandle, x: f64, y: f64) -> Result<(), Str
         return Ok(());
     }
 
+    // Use primary monitor to calculate position
+    let (final_x, final_y) = if let Ok(Some(monitor)) = app.primary_monitor() {
+        let size = monitor.size();
+        let scale = monitor.scale_factor();
+        let screen_width = size.width as f64 / scale;
+        let screen_height = size.height as f64 / scale;
+
+        // Position to the left of pet (which is at x,y)
+        // MiniChat is 380px wide, pet is ~120px, so offset by ~450px to the left
+        let win_width = 380.0;
+        let win_height = 520.0;
+        let mut new_x = x - win_width - 120.0; // Put to the left of pet
+        let mut new_y = y - 100.0; // Slightly above pet center
+
+        // Ensure on screen
+        if new_x < 50.0 { new_x = 50.0; }
+        if new_x > screen_width - win_width - 50.0 { new_x = screen_width - win_width - 50.0; }
+        if new_y < 50.0 { new_y = 50.0; }
+        if new_y > screen_height - win_height - 50.0 { new_y = screen_height - win_height - 50.0; }
+
+        tracing::info!("Screen: {}x{}, Pet pos: {}x{}, Final pos: {}x{}",
+            screen_width, screen_height, x, y, new_x, new_y);
+        (new_x, new_y)
+    } else {
+        (x.max(100.0), y.max(100.0))
+    };
+
+    tracing::info!("Creating new mini-chat window at x={}, y={}", final_x, final_y);
     // Create mini chat window near pet position
     let mini_window = WebviewWindowBuilder::new(
         &app,
         "mini-chat",
-        WebviewUrl::App("index.html".into()),
+        WebviewUrl::External("http://localhost:1420".parse().unwrap()),
     )
     .title("Claude Pet - Chat")
     .inner_size(380.0, 520.0)
     .decorations(false)
-    .transparent(true)
-    .shadow(false)
+    .transparent(false)  // Temporarily disabled for debugging
+    .shadow(true)
     .always_on_top(true)
     .resizable(false)
-    .position(x, y);
+    .position(final_x, final_y);
 
     #[cfg(target_os = "macos")]
     let mini_window = mini_window.title_bar_style(tauri::TitleBarStyle::Transparent);
 
-    mini_window.build().map_err(|e| e.to_string())?;
+    mini_window.build().map_err(|e| {
+        tracing::error!("Failed to build mini-chat window: {}", e);
+        e.to_string()
+    })?;
 
+    tracing::info!("mini-chat window built successfully");
     Ok(())
 }
 
@@ -223,8 +309,8 @@ async fn get_sessions() -> Result<Vec<state::Session>, String> {
             let session_id = entry.session_id.clone();
             let title = if entry.display.is_empty() {
                 "新对话".to_string()
-            } else if entry.display.len() > 30 {
-                format!("{}...", &entry.display[..30])
+            } else if entry.display.chars().count() > 30 {
+                format!("{}...", entry.display.chars().take(30).collect::<String>())
             } else {
                 entry.display
             };
@@ -500,4 +586,22 @@ async fn get_realtime_status(
     // Poll status with the cloned manager
     let mut manager = claude_manager.lock().await;
     manager.poll_status().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_current_tool() -> Result<Option<state::ToolStatus>, String> {
+    let path = std::path::PathBuf::from("/tmp/claude-pet-tool-status.json");
+    if !path.exists() {
+        return Ok(None);
+    }
+    let content = tokio::fs::read_to_string(&path)
+        .await
+        .map_err(|e| e.to_string())?;
+    let tool_status: state::ToolStatus = serde_json::from_str(&content)
+        .map_err(|e| e.to_string())?;
+    if tool_status.tool_name.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(tool_status))
+    }
 }

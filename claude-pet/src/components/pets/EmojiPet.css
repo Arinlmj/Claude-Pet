@@ -1,0 +1,254 @@
+/* Emoji 宠物容器 */
+.emoji-pet-container {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  -webkit-user-select: none;
+  outline: none;
+}
+
+/* 发光背景 */
+.pet-glow {
+  position: absolute;
+  width: 100px;
+  height: 100px;
+  background: radial-gradient(circle, rgba(255, 182, 193, 0.4) 0%, transparent 70%);
+  border-radius: 50%;
+  animation: glow-pulse 2s ease-in-out infinite;
+  z-index: 0;
+}
+
+@keyframes glow-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.9;
+  }
+}
+
+/* 闪烁星星装饰 */
+.pet-sparkles {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.sparkle {
+  position: absolute;
+  font-size: 12px;
+  opacity: 0;
+  animation: sparkle-float 3s ease-in-out infinite;
+}
+
+.sparkle.s1 {
+  top: 5%;
+  left: 10%;
+  animation-delay: 0s;
+}
+
+.sparkle.s2 {
+  top: 10%;
+  right: 15%;
+  animation-delay: 1s;
+}
+
+.sparkle.s3 {
+  bottom: 15%;
+  left: 5%;
+  animation-delay: 2s;
+}
+
+@keyframes sparkle-float {
+  0%, 100% {
+    opacity: 0;
+    transform: translateY(0) scale(0.5);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(-5px) scale(1);
+  }
+  80% {
+    opacity: 0.8;
+    transform: translateY(-15px) scale(0.8);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.5);
+  }
+}
+
+/* 主宠物包装器 */
+.pet-emoji-wrapper {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: idle-bounce 3s ease-in-out infinite;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.2));
+  transition: transform 0.3s ease, filter 0.3s ease;
+}
+
+.pet-emoji-wrapper:hover {
+  transform: scale(1.1);
+  filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.3));
+}
+
+/* Emoji 基础样式 */
+.pet-emoji-main {
+  font-size: 72px;
+  line-height: 1;
+  display: inline-block;
+  transition: transform 0.2s ease;
+}
+
+/* 配饰 emoji */
+.pet-emoji-accessory {
+  position: absolute;
+  font-size: 28px;
+  bottom: -5px;
+  right: -10px;
+  animation: accessory-bounce 2s ease-in-out infinite;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+@keyframes accessory-bounce {
+  0%, 100% { transform: translateY(0) rotate(-5deg); }
+  50% { transform: translateY(-5px) rotate(5deg); }
+}
+
+/* 呼吸动画 */
+@keyframes idle-bounce {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  15% {
+    transform: translateY(-3px) scale(1.02);
+  }
+  30% {
+    transform: translateY(0) scale(1);
+  }
+  45% {
+    transform: translateY(-2px) scale(1.01);
+  }
+  60%, 100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 眨眼动画 - 通过 scale 模拟 */
+.emoji-pet-container.blinking .pet-emoji-main {
+  animation: emoji-blink 4s ease-in-out infinite;
+}
+
+@keyframes emoji-blink {
+  0%, 90%, 100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.1);
+  }
+}
+
+/* 阴影 */
+.pet-shadow {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60px;
+  height: 15px;
+  background: radial-gradient(ellipse, rgba(0, 0, 0, 0.2) 0%, transparent 70%);
+  border-radius: 50%;
+  animation: shadow-pulse 3s ease-in-out infinite;
+  z-index: 0;
+}
+
+@keyframes shadow-pulse {
+  0%, 100% {
+    transform: translateX(-50%) scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translateX(-50%) scale(0.85);
+    opacity: 0.5;
+  }
+}
+
+/* ===== 交互动画 ===== */
+
+/* 弹跳 */
+.pet-emoji-wrapper.bounce {
+  animation: pet-bounce 0.6s ease !important;
+}
+
+@keyframes pet-bounce {
+  0% { transform: translateY(0) scale(1); }
+  20% { transform: translateY(-25px) scale(1.15); }
+  40% { transform: translateY(0) scale(0.9); }
+  55% { transform: translateY(-12px) scale(1.08); }
+  70% { transform: translateY(0) scale(0.95); }
+  85% { transform: translateY(-5px) scale(1.03); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+/* 旋转 */
+.pet-emoji-wrapper.spin {
+  animation: pet-spin 0.6s ease !important;
+}
+
+@keyframes pet-spin {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.3); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+/* 挤压 */
+.pet-emoji-wrapper.squish {
+  animation: pet-squish 0.6s ease !important;
+}
+
+@keyframes pet-squish {
+  0% { transform: scaleY(1) scaleX(1); }
+  25% { transform: scaleY(0.5) scaleX(1.5); }
+  50% { transform: scaleY(1.4) scaleX(0.7); }
+  75% { transform: scaleY(0.9) scaleX(1.1); }
+  100% { transform: scaleY(1) scaleX(1); }
+}
+
+/* 生气 */
+.pet-emoji-wrapper.angry {
+  animation: pet-angry 0.5s ease !important;
+}
+
+@keyframes pet-angry {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  15% { transform: scale(1.1) rotate(-10deg); }
+  30% { transform: scale(1.1) rotate(10deg); }
+  45% { transform: scale(1.05) rotate(-6deg); }
+  60% { transform: scale(1.05) rotate(6deg); }
+  75% { transform: scale(1.02) rotate(-3deg); }
+  90% { transform: scale(1.02) rotate(3deg); }
+}
+
+/* Hover 时加速动画 */
+.emoji-pet-container:hover .pet-emoji-wrapper {
+  animation-duration: 1.5s;
+}
+
+.emoji-pet-container:hover .pet-glow {
+  animation-duration: 1s;
+}
+
+.emoji-pet-container:hover .pet-shadow {
+  animation-duration: 1.5s;
+}

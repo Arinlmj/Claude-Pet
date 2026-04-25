@@ -7,6 +7,9 @@ use crate::mcp_client::ClaudeCliManager;
 pub struct AppState {
     pub current_state: String,
     pub claude_manager: Arc<Mutex<ClaudeCliManager>>,
+    pub active_session_id: Option<String>,  // 当前活动的会话 ID
+    pub last_tool_session_id: Option<String>,  // 上一个工具的会话 ID（用于完成通知）
+    pub last_tool_name: Option<String>,  // 上一个工具名称（用于完成通知）
 }
 
 impl AppState {
@@ -14,6 +17,9 @@ impl AppState {
         Self {
             current_state: "idle".to_string(),
             claude_manager: Arc::new(Mutex::new(ClaudeCliManager::new())),
+            active_session_id: None,
+            last_tool_session_id: None,
+            last_tool_name: None,
         }
     }
 }
@@ -91,5 +97,7 @@ pub struct HistoryEntry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolStatus {
     pub tool_name: String,
+    pub details: Option<String>,
     pub timestamp: u64,
+    pub session_id: Option<String>,  // 新增：关联的会话 ID
 }

@@ -1,18 +1,38 @@
 .pet-container {
   position: relative;
-  width: 220px;
-  height: 450px;
+  width: 320px;
+  height: 180px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
-  padding-bottom: 20px;
+  justify-content: flex-start;
+  padding-top: 5px;
   cursor: pointer;
   user-select: none;
+  -webkit-user-select: none;
   outline: none;
   border: none;
   background: transparent;
-  overflow: visible;
+  overflow: hidden;
+  -webkit-app-region: no-drag;
+}
+
+.pet-container * {
+  user-select: none;
+  -webkit-user-select: none;
+  outline: none;
+}
+
+.pet-container *:focus {
+  outline: none;
+}
+
+.tool-bubble-wrapper {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  z-index: 100;
+  margin-bottom: 5px;
 }
 
 .pet-ghost {
@@ -25,6 +45,8 @@
   border: none;
   background: transparent !important;
   box-shadow: none !important;
+  flex: 1;
+  z-index: 1;
 }
 
 .pet-svg {
@@ -77,6 +99,27 @@
 /* Angry animation */
 .pet-svg.angry {
   animation: angry 0.6s ease;
+}
+
+/* Bunny idle breathing */
+.pet-svg {
+  animation: bunnyBreathe 3s ease-in-out infinite;
+}
+
+@keyframes bunnyBreathe {
+  0%, 100% { transform: scale(1) translateY(0); }
+  50% { transform: scale(1.02) translateY(-2px); }
+}
+
+/* Bunny ear wiggle on hover */
+.pet-svg:hover {
+  animation: bunnyEarWiggle 0.5s ease-in-out infinite;
+}
+
+@keyframes bunnyEarWiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-3deg); }
+  75% { transform: rotate(3deg); }
 }
 
 @keyframes angry {
@@ -244,4 +287,178 @@
 .pet-ghost.default,
 .pet-ghost:not([class*="terminal"]):not([class*="file"]):not([class*="search"]):not([class*="git"]):not([class*="mcp"]):not([class*="conversation"]) {
   animation: wiggle 0.6s ease-in-out infinite;
+}
+
+/* Context Menu */
+.context-menu {
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 12px;
+  padding: 0;
+  width: 180px;
+  max-height: 160px;
+  overflow: hidden;
+  z-index: 1000;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(56, 189, 248, 0.1);
+  animation: menuFadeIn 0.15s ease-out;
+}
+
+@keyframes menuFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}
+
+.context-menu-tabs {
+  display: flex;
+  border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tab-btn:hover {
+  color: #e2e8f0;
+  background: rgba(56, 189, 248, 0.1);
+}
+
+.tab-btn.active {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.15);
+  border-bottom: 2px solid #38bdf8;
+}
+
+.context-menu-content {
+  max-height: 120px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+/* Pet List */
+.pet-list {
+  padding: 4px 0;
+}
+
+.pet-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  color: #e2e8f0;
+}
+
+.pet-item:hover {
+  background: rgba(56, 189, 248, 0.15);
+}
+
+.pet-item.active {
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+}
+
+.pet-emoji {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.pet-name {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.pet-check {
+  color: #38bdf8;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+/* Session List */
+.session-list {
+  max-height: 100px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.session-empty {
+  padding: 12px;
+  text-align: center;
+  color: #64748b;
+  font-size: 10px;
+}
+
+.session-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  font-size: 10px;
+  color: #e2e8f0;
+}
+
+.session-item:hover {
+  background: rgba(56, 189, 248, 0.15);
+}
+
+.session-item.active {
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+}
+
+.session-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.session-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.session-check {
+  color: #38bdf8;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+/* Scrollbar styling */
+.context-menu-content::-webkit-scrollbar,
+.session-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.context-menu-content::-webkit-scrollbar-track,
+.session-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.context-menu-content::-webkit-scrollbar-thumb,
+.session-list::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.3);
+  border-radius: 2px;
 }

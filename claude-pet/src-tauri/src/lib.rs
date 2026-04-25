@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use chrono::TimeZone;
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_notification::NotificationExt;
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use std::sync::mpsc::channel;
 use std::time::Duration;
@@ -19,8 +20,8 @@ fn get_bottom_right_position(app_handle: &tauri::AppHandle) -> (f64, f64) {
         if let Some(monitor) = monitor {
             let size = monitor.size();
             let scale = monitor.scale_factor();
-            let window_width = 220.0;
-            let window_height = 450.0;
+            let window_width = 320.0;
+            let window_height = 180.0;
             let padding = 20.0;
 
             let x = (size.width as f64 / scale) - window_width - padding;
@@ -152,6 +153,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(Mutex::new(AppState::new()))
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             // Setup tool status watcher
             if let Err(e) = setup_tool_status_watcher(app.handle().clone()) {
@@ -166,7 +168,7 @@ pub fn run() {
                 WebviewUrl::App("index.html".into()),
             )
             .title("Claude Pet")
-            .inner_size(220.0, 450.0)
+            .inner_size(320.0, 180.0)
             .decorations(false)
             .transparent(true)
             .shadow(false)
@@ -197,11 +199,15 @@ pub fn run() {
             send_message,
             get_current_state,
             set_pet_state,
+            set_active_session,
+            get_active_session,
             get_claude_status,
             get_project_info,
             get_interaction_info,
             get_realtime_status,
-            get_current_tool
+            get_current_tool,
+            notify_tool_completed,
+            send_notification
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -528,6 +534,19 @@ async fn set_pet_state(state: tauri::State<'_, Mutex<AppState>>, new_state: Stri
 }
 
 #[tauri::command]
+async fn set_active_session(state: tauri::State<'_, Mutex<AppState>>, session_id: Option<String>) -> Result<(), String> {
+    let mut app_state = state.lock().map_err(|e| e.to_string())?;
+    app_state.active_session_id = session_id;
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_active_session(state: tauri::State<'_, Mutex<AppState>>) -> Result<Option<String>, String> {
+    let app_state = state.lock().map_err(|e| e.to_string())?;
+    Ok(app_state.active_session_id.clone())
+}
+
+#[tauri::command]
 async fn get_claude_status(
     state: tauri::State<'_, Mutex<AppState>>,
 ) -> Result<state::ClaudeStatus, String> {
@@ -589,7 +608,12 @@ async fn get_realtime_status(
 }
 
 #[tauri::command]
-async fn get_current_tool() -> Result<Option<state::ToolStatus>, String> {
+async fn get_current_tool(state: tauri::State<'_, Mutex<AppState>>) -> Result<Option<state::ToolStatus>, String> {
+    let active_session_id = {
+        let app_state = state.lock().map_err(|e| e.to_string())?;
+        app_state.active_session_id.clone()
+    };
+
     let path = std::path::PathBuf::from("/tmp/claude-pet-tool-status.json");
     if !path.exists() {
         return Ok(None);
@@ -597,11 +621,182 @@ async fn get_current_tool() -> Result<Option<state::ToolStatus>, String> {
     let content = tokio::fs::read_to_string(&path)
         .await
         .map_err(|e| e.to_string())?;
-    let tool_status: state::ToolStatus = serde_json::from_str(&content)
-        .map_err(|e| e.to_string())?;
-    if tool_status.tool_name.is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(tool_status))
+
+    // 先尝试正常解析 JSON
+    if let Ok(tool_status) = serde_json::from_str::<state::ToolStatus>(&content) {
+        // 如果工具名称为空，返回 None
+        if tool_status.tool_name.is_empty() {
+            return Ok(None);
+        }
+
+        // 如果工具状态超过 10 秒没有更新，认为已结束
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        if now > tool_status.timestamp as u64 + 10 {
+            return Ok(None);
+        }
+
+        // 如果有活动会话 ID，检查是否匹配
+        if let Some(ref active_id) = active_session_id {
+            if let Some(ref tool_session_id) = tool_status.session_id {
+                // 如果 session_id 是 "unknown"，不过滤（显示工具）
+                if tool_session_id != "unknown" && tool_session_id != active_id {
+                    // 会话不匹配，返回 None（不显示）
+                    return Ok(None);
+                }
+            } else {
+                // 工具没有 session_id，但我们有活动的会话，不匹配
+                return Ok(None);
+            }
+        }
+
+        return Ok(Some(tool_status));
     }
+
+    // JSON 解析失败，尝试手动提取 tool_name
+    // 匹配 "tool_name":"xxx" 或 "tool_name": "xxx"
+    if let Some(tool_name_start) = content.find("\"tool_name\"") {
+        let after_name = &content[tool_name_start + 12..];
+        if let Some(colon_pos) = after_name.find(':') {
+            let after_colon = &after_name[colon_pos + 1..];
+            let trimmed = after_colon.trim_start();
+            if trimmed.starts_with('"') {
+                if let Some(end_quote) = trimmed[1..].find('"') {
+                    let tool_name = &trimmed[1..1 + end_quote];
+                    if !tool_name.is_empty() {
+                        // 尝试提取 details
+                        let details = if let Some(details_start) = content.find("\"details\"") {
+                            let after_details = &content[details_start + 10..];
+                            if let Some(dcolon) = after_details.find(':') {
+                                let after_dcolon = after_details[dcolon + 1..].trim_start();
+                                if after_dcolon.starts_with('"') {
+                                    let after_quote = &after_dcolon[1..];
+                                    // 找到下一个引号之前的内容
+                                    let details = after_quote.split('"').next().unwrap_or("");
+                                    Some(details.to_string())
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+
+                        // 尝试提取 timestamp
+                        let timestamp = if let Some(ts_start) = content.find("\"timestamp\"") {
+                            let after_ts = &content[ts_start + 12..];
+                            if let Some(ts_colon) = after_ts.find(':') {
+                                let after_ts_colon = after_ts[ts_colon + 1..].trim();
+                                after_ts_colon.split(|c: char| !c.is_numeric()).next()
+                                    .and_then(|s| s.parse::<u64>().ok())
+                                    .unwrap_or(0)
+                            } else {
+                                0
+                            }
+                        } else {
+                            0
+                        };
+
+                        // 尝试提取 session_id
+                        let session_id = if let Some(sid_start) = content.find("\"session_id\"") {
+                            let after_sid = &content[sid_start + 13..];
+                            if let Some(sid_colon) = after_sid.find(':') {
+                                let after_sid_colon = after_sid[sid_colon + 1..].trim_start();
+                                if after_sid_colon.starts_with('"') {
+                                    let after_quote = &after_sid_colon[1..];
+                                    let sid = after_quote.split('"').next().unwrap_or("unknown");
+                                    // 保持 "unknown" 为 Some("unknown")，让后续过滤器决定是否显示
+                                    if sid.is_empty() {
+                                        None
+                                    } else {
+                                        Some(sid.to_string())
+                                    }
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+
+                        // 会话过滤检查
+                        if let Some(ref active_id) = active_session_id {
+                            if let Some(ref tool_session_id) = session_id {
+                                // 如果 session_id 是 "unknown"，不过滤
+                                if tool_session_id != "unknown" && tool_session_id != active_id {
+                                    return Ok(None);
+                                }
+                            } else {
+                                return Ok(None);
+                            }
+                        }
+
+                        return Ok(Some(state::ToolStatus {
+                            tool_name: tool_name.to_string(),
+                            details,
+                            timestamp,
+                            session_id,
+                        }));
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+#[tauri::command]
+async fn send_notification(app: tauri::AppHandle, title: String, body: String) -> Result<(), String> {
+    app.notification()
+        .builder()
+        .title(&title)
+        .body(&body)
+        .show()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// 当工具执行完毕时，前端调用此命令发送通知
+#[tauri::command]
+async fn notify_tool_completed(
+    app: tauri::AppHandle,
+    session_id: Option<String>,
+    tool_name: String,
+    details: Option<String>,
+) -> Result<(), String> {
+    let session_label = session_id
+        .map(|id| {
+            // 截取 session_id 的前 8 位作为标识
+            if id.len() > 8 {
+                format!("会话{}", &id[..8])
+            } else {
+                format!("会话{}", id)
+            }
+        })
+        .unwrap_or_else(|| "某会话".to_string());
+
+    let detail_text = details
+        .map(|d| format!(" - {}", d))
+        .unwrap_or_default();
+
+    let title = "✅ 任务执行完成";
+    let body = format!("{}{} 已完成", session_label, detail_text);
+
+    app.notification()
+        .builder()
+        .title(title)
+        .body(&body)
+        .show()
+        .map_err(|e| e.to_string())?;
+
+    tracing::info!("Tool completed notification sent: {} - {}{}", session_label, tool_name, detail_text);
+    Ok(())
 }

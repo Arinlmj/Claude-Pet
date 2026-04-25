@@ -1,25 +1,37 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import HoverInfoPanel from "./HoverInfoPanel";
 import ToolBubble, { getToolCategory } from "./ToolBubble";
 import { usePetState } from "../hooks/usePetState";
+import { EmojiPetRenderer, getStateEmoji, PET_PRESETS, PetType } from "./pets/EmojiPet";
+import { ContextMenu } from "./pets/ContextMenu";
 import "./Pet.css";
 
 type InteractionType = "bounce" | "spin" | "squish" | "angry" | null;
 
-interface PetProps {
-  onHoverChange?: (isHovering: boolean) => void;
+interface Session {
+  id: string;
+  title: string;
+  updated_at: string;
 }
 
-function Pet({ onHoverChange }: PetProps) {
+interface PetProps {}
+
+const PET_TYPE_KEY = "claude-pet-type";
+
+function Pet(_props: PetProps) {
   const { state, currentTool } = usePetState();
   const [isBlinking, setIsBlinking] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [interaction, setInteraction] = useState<InteractionType>(null);
   const [showStars, setShowStars] = useState(false);
-  const [isHovering, setIsHovering] = useState(false);
   const [toolAnimation, setToolAnimation] = useState<string>("");
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [menuTab, setMenuTab] = useState<"pets" | "sessions">("pets");
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [petType, setPetType] = useState<PetType>("bunny");
+  const menuRef = useRef<HTMLDivElement>(null);
   const currentPosRef = useRef({ x: 1100, y: 650 });
   const targetRef = useRef({ x: 1100, y: 650 });
   const isDraggingRef = useRef(false);
@@ -28,6 +40,14 @@ function Pet({ onHoverChange }: PetProps) {
   const lastClickTimeRef = useRef(0);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPressRef = useRef(false);
+
+  // Load pet type from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem(PET_TYPE_KEY);
+    if (saved && PET_PRESETS.some(p => p.type === saved)) {
+      setPetType(saved as PetType);
+    }
+  }, []);
 
   // Initialize position on mount - bottom right
   useEffect(() => {
@@ -42,6 +62,36 @@ function Pet({ onHoverChange }: PetProps) {
     };
     init();
   }, []);
+
+  // Load sessions and active session on mount
+  useEffect(() => {
+    const loadSessions = async () => {
+      try {
+        const sessionList = await invoke<Session[]>("get_sessions");
+        setSessions(sessionList);
+        const activeId = await invoke<string | null>("get_active_session");
+        setActiveSessionId(activeId);
+      } catch (e) {
+        console.error("Failed to load sessions:", e);
+      }
+    };
+    loadSessions();
+  }, []);
+
+  // Click outside to close menu
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowContextMenu(false);
+      }
+    };
+    if (showContextMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showContextMenu]);
 
   // Random blinking animation
   useEffect(() => {
@@ -148,11 +198,10 @@ function Pet({ onHoverChange }: PetProps) {
             // Double click - spin
             triggerInteraction("spin");
           } else {
-            // Single click - open mini chat and bounce (delayed to detect double click)
+            // Single click - bounce (delayed to detect double click)
             setTimeout(() => {
               if (!isDraggingRef.current) {
                 triggerInteraction("bounce");
-                handleSingleClick();
               }
             }, 300);
           }
@@ -183,52 +232,34 @@ function Pet({ onHoverChange }: PetProps) {
     }
   }, []);
 
-  // Handle single click - open mini chat window
-  const handleSingleClick = useCallback(async () => {
-    try {
-      const win = getCurrentWindow();
-      const pos = await win.outerPosition();
-      // Open mini chat near pet position
-      await invoke("open_mini_chat", { x: pos.x, y: pos.y + 130 });
-    } catch (err) {
-      console.error("Failed to open mini chat:", err);
-    }
-  }, []);
-
-  // Handle right-click - angry
+  // Handle right-click - show context menu
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    triggerInteraction("angry");
-  }, [triggerInteraction]);
+    e.stopPropagation();
+    setShowContextMenu(true);
+    setMenuTab("pets");
+    // Reload sessions when menu opens
+    invoke<Session[]>("get_sessions").then(setSessions).catch(console.error);
+    invoke<string | null>("get_active_session").then(setActiveSessionId).catch(console.error);
+  }, []);
 
-  // Get eye expression based on interaction state
-  const getEyeExpression = () => {
-    if (interaction === "bounce") {
-      // Happy squinting eyes ^_^
-      return (
-        <>
-          <path d="M 32 45 Q 38 38 44 45" stroke="#333" strokeWidth="3" fill="none" strokeLinecap="round" />
-          <path d="M 56 45 Q 62 38 68 45" stroke="#333" strokeWidth="3" fill="none" strokeLinecap="round" />
-        </>
-      );
+  // Switch pet
+  const handleSwitchPet = useCallback((type: PetType) => {
+    setPetType(type);
+    localStorage.setItem(PET_TYPE_KEY, type);
+    setShowContextMenu(false);
+  }, []);
+
+  // Switch session
+  const handleSwitchSession = useCallback(async (sessionId: string) => {
+    try {
+      await invoke("set_active_session", { sessionId });
+      setActiveSessionId(sessionId);
+      setShowContextMenu(false);
+    } catch (e) {
+      console.error("Failed to switch session:", e);
     }
-    if (interaction === "angry") {
-      // Angry flat eyes
-      return (
-        <>
-          <ellipse cx="38" cy="45" rx="6" ry="3" fill="#333" />
-          <ellipse cx="62" cy="45" rx="6" ry="3" fill="#333" />
-        </>
-      );
-    }
-    // Normal blinking eyes
-    return (
-      <>
-        <ellipse cx="38" cy="45" rx="6" ry={isBlinking ? "1" : "8"} fill="#333" className="eye" />
-        <ellipse cx="62" cy="45" rx="6" ry={isBlinking ? "1" : "8"} fill="#333" className="eye" />
-      </>
-    );
-  };
+  }, []);
 
   const getAnimationClass = () => {
     if (interaction) return interaction;
@@ -241,61 +272,35 @@ function Pet({ onHoverChange }: PetProps) {
       onClick={handleClick}
       onMouseDown={handleMouseDown}
       onContextMenu={handleContextMenu}
-      onMouseEnter={() => {
-        setIsHovering(true);
-        onHoverChange?.(true);
-      }}
-      onMouseLeave={() => {
-        setIsHovering(false);
-        onHoverChange?.(false);
-      }}
     >
-        <ToolBubble toolName={currentTool?.tool_name ?? null} visible={!!currentTool?.tool_name} />
-        <div className={`pet-ghost ${state} ${toolAnimation}`} style={{ zIndex: 1 }}>
-          <svg
-            viewBox="0 0 100 100"
-            width="80"
-            height="80"
+        {/* Context Menu */}
+        <ContextMenu
+          show={showContextMenu}
+          activeTab={menuTab}
+          onTabChange={setMenuTab}
+          pets={PET_PRESETS}
+          currentPetType={petType}
+          onSelectPet={(type) => handleSwitchPet(type as PetType)}
+          sessions={sessions}
+          activeSessionId={activeSessionId}
+          onSelectSession={handleSwitchSession}
+          onClose={() => setShowContextMenu(false)}
+        />
+
+        <div className="tool-bubble-wrapper">
+          <ToolBubble toolName={currentTool?.tool_name ?? null} details={currentTool?.details ?? null} visible={!!currentTool?.tool_name} />
+        </div>
+        <div className={`pet-ghost ${state} ${toolAnimation}`}>
+          <EmojiPetRenderer
+            type={petType}
+            isBlinking={isBlinking}
+            interaction={interaction}
             className={`pet-svg ${getAnimationClass()}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleSingleClick();
-            }}
-          >
-            <defs>
-              <filter id="glow">
-                <feGaussianBlur stdDeviation="2" result="coloredBlur" />
-                <feMerge>
-                  <feMergeNode in="coloredBlur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-              <linearGradient id="ghost-body" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="rgba(200, 200, 255, 1)" />
-                <stop offset="100%" stopColor="rgba(150, 150, 220, 1)" />
-              </linearGradient>
-            </defs>
-
-            <path
-              className="ghost-path"
-              d="M 25 85 L 25 40 Q 25 15 50 15 Q 75 15 75 40 L 75 85
-                 L 68 78 L 62 85 L 56 78 L 50 85 L 44 78 L 38 85 L 32 78 Z"
-              fill="url(#ghost-body)"
-            />
-
-            {getEyeExpression()}
-            <ellipse cx="30" cy="55" rx="5" ry="3" fill="rgba(255, 150, 150, 0.35)" />
-            <ellipse cx="70" cy="55" rx="5" ry="3" fill="rgba(255, 150, 150, 0.35)" />
-          </svg>
+          />
           <div className={`state-bubble ${state}`}>
-            {state === "thinking" && "💭"}
-            {state === "typing" && "✏️"}
-            {state === "waiting" && "⏳"}
-            {state === "error" && "❌"}
-            {state === "idle" && "😴"}
+            {getStateEmoji(petType, state)}
           </div>
         </div>
-        <HoverInfoPanel visible={isHovering} />
         {showStars && (
           <>
             <span className="star-particle" style={{ top: "10%", left: "20%" }}>✨</span>

@@ -87,11 +87,9 @@ impl ClaudeCliManager {
         match serde_json::from_str::<serde_json::Value>(&stdout) {
             Ok(json) => {
                 self.connected = true;
-                let state = json.get("state")
-                    .or_else(|| json.get("status"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("idle")
-                    .to_string();
+
+                // 从 Claude Code 响应中解析状态
+                let state = self.parse_state_from_json(&json);
                 self.current_state = state.clone();
 
                 Ok(ClaudeStatus {
@@ -113,6 +111,34 @@ impl ClaudeCliManager {
                     current_task: None,
                     recent_activities: vec![],
                 })
+            }
+        }
+    }
+
+    /// 从 Claude Code 的 JSON 响应中解析状态
+    fn parse_state_from_json(&self, json: &serde_json::Value) -> String {
+        // 检查 terminal_reason 和 stop_reason 字段
+        let terminal_reason = json.get("terminal_reason")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        let stop_reason = json.get("stop_reason")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        // 根据 Claude Code 的状态字段映射到我们的状态
+        match (terminal_reason, stop_reason) {
+            ("", "") | ("completed", _) | (_, "end_turn") => "idle".to_string(),
+            ("tool_use", _) | ("", "tool_use") => "thinking".to_string(),
+            ("", "waiting_for_user") | ("completed", "waiting_for_user") => "waiting".to_string(),
+            _ => {
+                // 检查 result 中是否包含正在输入的迹象
+                if let Some(result) = json.get("result").and_then(|v| v.as_str()) {
+                    if result.contains("正在") || result.contains("typing") {
+                        return "typing".to_string();
+                    }
+                }
+                "idle".to_string()
             }
         }
     }

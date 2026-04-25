@@ -53,6 +53,8 @@ function MiniChat() {
         setSessions(sessionList);
         if (sessionList.length > 0) {
           setCurrentSessionId(sessionList[0].id);
+          // 设置活动会话
+          await invoke("set_active_session", { sessionId: sessionList[0].id });
         }
       } catch (e) {
         console.error("Failed to load sessions:", e);
@@ -162,6 +164,7 @@ function MiniChat() {
     setSessions((prev) => [newSession, ...prev]);
     setCurrentSessionId(newSession.id);
     setMessages([]);
+    invoke("set_active_session", { sessionId: newSession.id });
   }, []);
 
   return (
@@ -202,7 +205,10 @@ function MiniChat() {
                 className={`session-item ${
                   session.id === currentSessionId ? "active" : ""
                 }`}
-                onClick={() => setCurrentSessionId(session.id)}
+                onClick={async () => {
+                  setCurrentSessionId(session.id);
+                  await invoke("set_active_session", { sessionId: session.id });
+                }}
               >
                 <div className="session-title">{session.title}</div>
                 <div className="session-time">{session.updated_at}</div>

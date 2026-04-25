@@ -1,38 +1,159 @@
 .tool-bubble {
-  position: absolute;
-  top: -35px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(255, 255, 255, 0.95);
-  border: 2px solid #e0e0e0;
-  border-radius: 12px;
-  padding: 4px 12px;
+  position: relative;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 8px;
+  padding: 6px 10px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #333;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  gap: 8px;
+  font-size: 11px;
+  color: #fff;
+  box-shadow:
+    0 0 15px rgba(56, 189, 248, 0.1),
+    0 4px 12px rgba(0, 0, 0, 0.4);
   white-space: nowrap;
+  max-width: 300px;
+  overflow: hidden;
   z-index: 100;
+  pointer-events: none;
+  font-family: "SF Mono", "Fira Code", "JetBrains Mono", "Consolas", monospace;
+  animation: toolBubbleIn 0.25s ease-out;
 }
 
+/* 小箭头指向下方宠物 */
 .tool-bubble::after {
   content: "";
   position: absolute;
-  bottom: -6px;
+  bottom: -5px;
   left: 50%;
   transform: translateX(-50%);
-  border-left: 6px solid transparent;
-  border-right: 6px solid transparent;
-  border-top: 6px solid rgba(255, 255, 255, 0.95);
+  border: 5px solid transparent;
+  border-top-color: #1e293b;
 }
 
+@keyframes toolBubbleIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 工具类型颜色 */
+.tool-bubble.terminal {
+  border-color: rgba(34, 197, 94, 0.4);
+  box-shadow: 0 0 15px rgba(34, 197, 94, 0.15), 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.tool-bubble.file {
+  border-color: rgba(59, 130, 246, 0.4);
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.15), 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.tool-bubble.search {
+  border-color: rgba(168, 85, 247, 0.4);
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.15), 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.tool-bubble.git {
+  border-color: rgba(249, 115, 22, 0.4);
+  box-shadow: 0 0 15px rgba(249, 115, 22, 0.15), 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.tool-bubble.mcp {
+  border-color: rgba(236, 72, 153, 0.4);
+  box-shadow: 0 0 15px rgba(236, 72, 153, 0.15), 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.tool-bubble.conversation {
+  border-color: rgba(250, 204, 21, 0.4);
+  box-shadow: 0 0 15px rgba(250, 204, 21, 0.15), 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.tool-icon-box {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.tool-bubble.terminal .tool-icon-box { background: rgba(34, 197, 94, 0.2); }
+.tool-bubble.file .tool-icon-box { background: rgba(59, 130, 246, 0.2); }
+.tool-bubble.search .tool-icon-box { background: rgba(168, 85, 247, 0.2); }
+.tool-bubble.git .tool-icon-box { background: rgba(249, 115, 22, 0.2); }
+.tool-bubble.mcp .tool-icon-box { background: rgba(236, 72, 153, 0.2); }
+.tool-bubble.conversation .tool-icon-box { background: rgba(250, 204, 21, 0.2); }
+
 .tool-icon {
-  font-size: 14px;
+  font-size: 11px;
+}
+
+.tool-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.tool-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .tool-name {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 700;
+  font-size: 9px;
+  color: #e2e8f0;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.tool-details {
+  font-size: 9px;
+  color: #94a3b8;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
+}
+
+.tool-status {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.tool-running-dots {
+  display: flex;
+  gap: 2px;
+}
+
+.tool-dot {
+  width: 4px;
+  height: 4px;
+  background: #22c55e;
+  border-radius: 50%;
+  animation: toolPulse 1s ease-in-out infinite;
+}
+
+.tool-dot:nth-child(2) { animation-delay: 0.15s; }
+.tool-dot:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes toolPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(0.7); }
 }

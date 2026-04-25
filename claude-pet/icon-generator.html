@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude Pet Icon Generator</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      color: white;
+    }
+    h1 { margin-bottom: 30px; font-weight: 600; }
+    .preview { display: flex; gap: 40px; margin-bottom: 30px; }
+    .preview-item { text-align: center; }
+    .preview-item canvas {
+      border-radius: 22%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      margin-bottom: 10px;
+    }
+    .preview-item span { font-size: 14px; color: #888; }
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border: none;
+      padding: 15px 40px;
+      border-radius: 12px;
+      color: white;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    button:hover { transform: scale(1.05); }
+    .note { margin-top: 20px; color: #666; font-size: 13px; }
+    .sizes { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; max-width: 600px; }
+    .size-btn {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      padding: 10px 20px;
+      border-radius: 8px;
+      color: white;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .size-btn:hover {
+      background: rgba(255,255,255,0.2);
+    }
+  </style>
+</head>
+<body>
+  <h1>Claude Pet Icon Generator</h1>
+  <div class="preview">
+    <div class="preview-item">
+      <canvas id="iconPreview" width="256" height="256"></canvas>
+      <span>Preview (256×256)</span>
+    </div>
+  </div>
+  <div class="sizes">
+    <button class="size-btn" onclick="downloadIcon(16)">16×16</button>
+    <button class="size-btn" onclick="downloadIcon(32)">32×32</button>
+    <button class="size-btn" onclick="downloadIcon(64)">64×64</button>
+    <button class="size-btn" onclick="downloadIcon(128)">128×128</button>
+    <button class="size-btn" onclick="downloadIcon(256)">256×256</button>
+    <button class="size-btn" onclick="downloadIcon(512)">512×512</button>
+    <button class="size-btn" onclick="downloadAll()">Download All</button>
+  </div>
+  <p class="note" style="margin-top: 30px;">For macOS .icns, use: <code>iconutil --convert icns icon.iconset</code></p>
+
+  <script>
+    function drawMacIcon(canvas, size, petEmoji = '🐰') {
+      const ctx = canvas.getContext('2d');
+      const s = canvas.width;
+
+      // Clear
+      ctx.clearRect(0, 0, s, s);
+
+      // Mac-style rounded rect (superellipse) - use larger radius for Mac look
+      const r = s * 0.22;
+
+      // Gradient background - purple to indigo (modern Mac style)
+      const grad = ctx.createLinearGradient(0, 0, s, s);
+      grad.addColorStop(0, '#8b5cf6');
+      grad.addColorStop(0.3, '#7c3aed');
+      grad.addColorStop(0.7, '#6366f1');
+      grad.addColorStop(1, '#4f46e5');
+
+      // Draw rounded rect background
+      ctx.beginPath();
+      ctx.moveTo(r, 0);
+      ctx.lineTo(s - r, 0);
+      ctx.quadraticCurveTo(s, 0, s, r);
+      ctx.lineTo(s, s - r);
+      ctx.quadraticCurveTo(s, s, s - r, s);
+      ctx.lineTo(r, s);
+      ctx.quadraticCurveTo(0, s, 0, s - r);
+      ctx.lineTo(0, r);
+      ctx.quadraticCurveTo(0, 0, r, 0);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Top highlight reflection
+      const highlightGrad = ctx.createLinearGradient(0, 0, 0, s * 0.5);
+      highlightGrad.addColorStop(0, 'rgba(255,255,255,0.25)');
+      highlightGrad.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = highlightGrad;
+      ctx.fill();
+
+      // Subtle shadow at bottom
+      const shadowGrad = ctx.createLinearGradient(0, s * 0.7, 0, s);
+      shadowGrad.addColorStop(0, 'rgba(0,0,0,0)');
+      shadowGrad.addColorStop(1, 'rgba(0,0,0,0.15)');
+      ctx.fillStyle = shadowGrad;
+      ctx.fill();
+
+      // Draw pet emoji
+      const fontSize = s * 0.5;
+      ctx.font = `${fontSize}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      // Slight shadow under emoji
+      ctx.fillStyle = 'rgba(0,0,0,0.15)';
+      ctx.fillText(petEmoji, s/2 + 2, s/2 + 2);
+
+      // Draw emoji
+      ctx.fillStyle = 'rgba(255,255,255,1)';
+      ctx.fillText(petEmoji, s/2, s/2);
+
+      return canvas;
+    }
+
+    // Draw preview
+    const previewCanvas = document.getElementById('iconPreview');
+    drawMacIcon(previewCanvas, 256);
+
+    function downloadIcon(size) {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      drawMacIcon(canvas, size);
+
+      const link = document.createElement('a');
+      link.download = `icon_${size}x${size}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+
+    function downloadAll() {
+      const sizes = [16, 32, 64, 128, 256, 512, 1024];
+      sizes.forEach((size, i) => {
+        setTimeout(() => downloadIcon(size), i * 300);
+      });
+    }
+  </script>
+</body>
+</html>

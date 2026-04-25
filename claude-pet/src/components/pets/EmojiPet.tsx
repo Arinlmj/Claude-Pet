@@ -1,6 +1,8 @@
 import "./EmojiPet.css";
 
-export type PetType = "bunny" | "cat" | "dog" | "hamster" | "rabbit" | "panda" | "koala" | "owl";
+export type PetType =
+  | "bunny" | "cat" | "dog" | "hamster" | "rabbit" | "panda" | "koala" | "owl"
+  | "bear" | "fox" | "pig" | "lion" | "unicorn" | "penguin" | "frog";
 
 export interface PetConfig {
   type: PetType;
@@ -10,6 +12,7 @@ export interface PetConfig {
 }
 
 export const PET_PRESETS: PetConfig[] = [
+  // 经典宠物
   { type: "bunny", name: "小兔子", emoji: "🐰", secondaryEmoji: "🥕" },
   { type: "cat", name: "小猫咪", emoji: "🐱", secondaryEmoji: "🐟" },
   { type: "dog", name: "小奶狗", emoji: "🐶", secondaryEmoji: "🦴" },
@@ -18,6 +21,14 @@ export const PET_PRESETS: PetConfig[] = [
   { type: "panda", name: "小熊猫", emoji: "🐼", secondaryEmoji: "🎋" },
   { type: "koala", name: "小考拉", emoji: "🐨", secondaryEmoji: "🌿" },
   { type: "owl", name: "小猫头鹰", emoji: "🦉", secondaryEmoji: "🌙" },
+  // 新增可爱宠物
+  { type: "bear", name: "小熊", emoji: "🐻", secondaryEmoji: "🍯" },
+  { type: "fox", name: "小狐狸", emoji: "🦊", secondaryEmoji: "🍎" },
+  { type: "pig", name: "小猪猪", emoji: "🐷", secondaryEmoji: "🌸" },
+  { type: "lion", name: "小狮子", emoji: "🦁", secondaryEmoji: "👑" },
+  { type: "unicorn", name: "独角兽", emoji: "🦄", secondaryEmoji: "✨" },
+  { type: "penguin", name: "小企鹅", emoji: "🐧", secondaryEmoji: "❄️" },
+  { type: "frog", name: "小青蛙", emoji: "🐸", secondaryEmoji: "🍀" },
 ];
 
 interface PetRendererProps {

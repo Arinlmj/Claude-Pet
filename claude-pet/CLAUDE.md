@@ -69,7 +69,7 @@ cargo build          # 构建 Tauri 应用 (生产)
 - 长按(500ms) squish
 - 右键 angry
 
-宠物类型存储在 localStorage (`claude-pet-type`)，支持 8 种 Emoji 宠物。
+宠物类型存储在 localStorage (`claude-pet-type`)，支持 15 种 Emoji 宠物（兔子、猫、狗、仓鼠、熊猫、考拉、猫头鹰、熊、狐狸、猪、狮子、独角兽、企鹅、青蛙）。
 
 ## 配置
 
@@ -78,9 +78,18 @@ cargo build          # 构建 Tauri 应用 (生产)
 - `vite.config.ts` - Vite 配置
 - `tsconfig.json` - TypeScript 严格模式
 
+## 图标生成
+
+Mac 图标位于 `src-tauri/icons/icon.icns`，使用 Mac 风格紫色渐变 + Emoji 设计。
+如需重新生成：
+```bash
+node generate-icons.cjs  # 生成 iconset
+cd src-tauri/icons && iconutil --convert icns icon.iconset
+```
+
 ## 开发注意事项
 
-- MCP client (`mcp_client.rs`) 目前是 stub 实现，大部分命令返回模拟数据
 - 窗口使用 `transparent: true`，需要确保 CSS 没有不透明背景
 - 宠物右键菜单使用 `position: absolute` 相对于 pet-container
 - `notify` crate 用于监控 `/tmp/claude-pet-tool-status.json` 文件变化
+- 文件轮询：状态 2s，工具 300ms

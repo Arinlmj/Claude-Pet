@@ -2,7 +2,7 @@ import "./EmojiPet.css";
 
 export type PetType =
   | "bunny" | "cat" | "dog" | "hamster" | "rabbit" | "panda" | "koala" | "owl"
-  | "bear" | "fox" | "pig" | "lion" | "unicorn" | "penguin" | "frog";
+  | "bear" | "fox" | "pig" | "lion" | "unicorn" | "penguin" | "frog" | "peacock" | "octopus";
 
 export interface PetConfig {
   type: PetType;
@@ -29,6 +29,8 @@ export const PET_PRESETS: PetConfig[] = [
   { type: "unicorn", name: "独角兽", emoji: "🦄", secondaryEmoji: "✨" },
   { type: "penguin", name: "小企鹅", emoji: "🐧", secondaryEmoji: "❄️" },
   { type: "frog", name: "小青蛙", emoji: "🐸", secondaryEmoji: "🍀" },
+  { type: "peacock", name: "小孔雀", emoji: "🦚", secondaryEmoji: "🌸" },
+  { type: "octopus", name: "小章鱼", emoji: "🐙", secondaryEmoji: "🌊" },
 ];
 
 interface PetRendererProps {
